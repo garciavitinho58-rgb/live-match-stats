@@ -5,6 +5,10 @@ const path=require('path');
 const PORT=process.env.PORT||3000;
 const HOST='www.sofascore.com';
 
+// Cache leve (15s) pra não martelar o SofaScore a cada clique em "Atualizar"
+const CACHE_TTL_MS=15000;
+const cache=new Map();
+
 function requestJSON(p){
   return new Promise((resolve,reject)=>{
     const req=https.request({hostname:HOST,path:p,method:'GET',headers:{
@@ -16,7 +20,9 @@ function requestJSON(p){
         try{resolve(JSON.parse(d))}catch(e){reject(new Error('Resposta não-JSON do SofaScore'))}
       });
     });
-    req.on('error',reject); req.setTimeout(10000,()=>req.destroy(new Error('Timeout')));
+    req.on('error',reject);
+    req.setTimeout(10000,()=>req.destroy(new Error('Timeout')));
+    req.end(); // <- faltava isso: sem end(), a requisição nunca é finalizada e fica pendurada até estourar o timeout
   });
 }
 function idFrom(s){
@@ -35,10 +41,22 @@ const endpoints={
   momentum:id=>`/api/v1/event/${id}/momentum`
 };
 async function api(id){
+  const hit=cache.get(id);
+  if(hit && (Date.now()-hit.at)<CACHE_TTL_MS) return hit.data;
   const out={};
   for(const [k,fn] of Object.entries(endpoints)){
-    try{out[k]=await requestJSON(fn(id))}catch(e){out[k]={error:e.message}}
+    try{
+      out[k]=await requestJSON(fn(id));
+    }catch(e){
+      out[k]={
+        error:e.message,
+        friendly: e.message==='Timeout'
+          ? 'O servidor de dados não respondeu a tempo.'
+          : 'Não foi possível obter esses dados agora.'
+      };
+    }
   }
+  cache.set(id,{at:Date.now(),data:out});
   return out;
 }
 const html=fs.readFileSync(path.join(__dirname,'public','index.html'));
