@@ -28,7 +28,8 @@ async function load(refresh=false){
  const q=document.getElementById('q').value;const id=idFrom(q);if(!id){msg('ID não encontrado. Cole o link completo do SofaScore.','err');return}
  last=id;msg('Buscando dados no servidor...');try{
  const r=await fetch('/api/match?id='+encodeURIComponent(id),{cache:'no-store'});const j=await r.json();if(!r.ok)throw Error(j.error||'Erro');
- const e=j.data.event?.event;if(!e)throw Error(j.data.event?.error||'Partida não encontrada');
+ const e=j.data.event?.event;
+ if(!e){const err=j.data.event;throw Error(err?.friendly||err?.error||'Partida não encontrada')}
  document.getElementById('game').hidden=false;
  document.getElementById('teams').textContent=(e.homeTeam?.name||'Casa')+' x '+(e.awayTeam?.name||'Fora');
  document.getElementById('score').textContent=(e.homeScore?.current??'-')+' x '+(e.awayScore?.current??'-');
