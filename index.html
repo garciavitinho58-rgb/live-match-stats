@@ -1,0 +1,42 @@
+<!doctype html><html lang="pt-BR"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Live Match Stats V2</title>
+<style>
+body{margin:0;background:#0e1217;color:#f4f6f8;font-family:system-ui,sans-serif}.wrap{max-width:950px;margin:auto;padding:18px}
+.card{background:#171c23;border:1px solid #2a313b;border-radius:14px;padding:15px;margin:12px 0}
+input{width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid #3a4350;background:#0c1015;color:white;font-size:15px}
+button{padding:11px 15px;border:0;border-radius:9px;margin:9px 6px 0 0;font-weight:700;cursor:pointer}.go{background:white;color:#111}.refresh{background:#303844;color:white}
+h1{margin:0}.muted{color:#9aa4b2}.score{font-size:34px;font-weight:800}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}.stat{padding:12px;background:#0e1319;border-radius:10px}.name{font-size:12px;color:#9aa4b2}.val{font-size:19px;font-weight:750;margin-top:4px}.err{color:#ff9292}.ok{color:#8fe29a}
+pre{white-space:pre-wrap;word-break:break-word;max-height:450px;overflow:auto;background:#0b0f14;padding:10px;border-radius:9px}
+</style></head><body><div class="wrap">
+<div class="card"><h1>⚽ Live Match Stats V2</h1><p class="muted">Cole o link ou o ID da partida do SofaScore.</p>
+<input id="q" placeholder="https://www.sofascore.com/...#id:15502641">
+<button class="go" onclick="load()">Carregar</button><button class="refresh" onclick="load(true)">🔄 Atualizar</button>
+<div id="msg" class="muted"></div></div>
+<div id="game" class="card" hidden><h2 id="teams"></h2><div id="score" class="score"></div><div id="desc" class="muted"></div></div>
+<div id="stats" class="card" hidden><h2>📊 Estatísticas</h2><div id="grid" class="grid"></div></div>
+<div id="extra" class="card" hidden><h2>🧩 Endpoints</h2><p class="muted">A V2 consulta evento, estatísticas, incidentes, escalações e gráfico/momentum quando disponíveis.</p><pre id="raw"></pre></div>
+</div>
+<script>
+let last='';
+function idFrom(s){s=s.trim();if(/^\d{5,}$/.test(s))return s;let m=s.match(/#id:(\d{5,})/);if(m)return m[1];m=s.match(/\b(\d{6,})\b/);return m?m[1]:null}
+function msg(t,c='muted'){document.getElementById('msg').className=c;document.getElementById('msg').textContent=t}
+function flatten(x,a=[]){if(!x||typeof x!=='object')return a;if(Array.isArray(x)){x.forEach(v=>flatten(v,a));return a}
+if(x.name!==undefined&&(x.home!==undefined||x.away!==undefined))a.push([x.name,x.home,x.away]);
+Object.values(x).forEach(v=>flatten(v,a));return a}
+async function load(refresh=false){
+ const q=document.getElementById('q').value;const id=idFrom(q);if(!id){msg('ID não encontrado. Cole o link completo do SofaScore.','err');return}
+ last=id;msg('Buscando dados no servidor...');try{
+ const r=await fetch('/api/match?id='+encodeURIComponent(id),{cache:'no-store'});const j=await r.json();if(!r.ok)throw Error(j.error||'Erro');
+ const e=j.data.event?.event;if(!e)throw Error(j.data.event?.error||'Partida não encontrada');
+ document.getElementById('game').hidden=false;
+ document.getElementById('teams').textContent=(e.homeTeam?.name||'Casa')+' x '+(e.awayTeam?.name||'Fora');
+ document.getElementById('score').textContent=(e.homeScore?.current??'-')+' x '+(e.awayScore?.current??'-');
+ document.getElementById('desc').textContent=e.status?.description||e.status?.type||'';
+ const rows=flatten(j.data.stats);const grid=document.getElementById('grid');grid.innerHTML='';
+ const seen=new Set();rows.filter(r=>{let k=r.join('|');if(seen.has(k))return false;seen.add(k);return true}).slice(0,100).forEach(r=>{let d=document.createElement('div');d.className='stat';d.innerHTML='<div class="name">'+r[0]+'</div><div class="val">'+(r[1]??'-')+' × '+(r[2]??'-')+'</div>';grid.appendChild(d)});
+ document.getElementById('stats').hidden=false;document.getElementById('extra').hidden=false;
+ document.getElementById('raw').textContent=JSON.stringify(j.data,null,2);msg('Atualizado com sucesso.','ok');
+ }catch(e){msg('Erro: '+e.message,'err')}
+}
+</script></body></html>
