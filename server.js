@@ -1,73 +1,223 @@
-const http=require('http');
-const https=require('https');
-const fs=require('fs');
-const path=require('path');
-const PORT=process.env.PORT||3000;
-const HOST='www.sofascore.com';
+const http = require('http');
+const https = require('https');
+const fs = require('fs');
+const path = require('path');
 
-// Cache leve (15s) pra não martelar o SofaScore a cada clique em "Atualizar"
-const CACHE_TTL_MS=15000;
-const cache=new Map();
+const PORT = process.env.PORT || 3000;
 
-function requestJSON(p){
-  return new Promise((resolve,reject)=>{
-    const req=https.request({hostname:HOST,path:p,method:'GET',headers:{
-      'User-Agent':'Mozilla/5.0','Accept':'application/json,text/plain,*/*',
-      'Referer':'https://www.sofascore.com/'
-    }},res=>{
-      let d=''; res.on('data',c=>d+=c); res.on('end',()=>{
-        if(res.statusCode<200||res.statusCode>=300)return reject(new Error('SofaScore HTTP '+res.statusCode));
-        try{resolve(JSON.parse(d))}catch(e){reject(new Error('Resposta não-JSON do SofaScore'))}
+const SOFASCORE_HOST = 'www.sofascore.com';
+const CACHE_TTL = 10000;
+const cache = new Map();
+
+function requestJSON(endpoint) {
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname: SOFASCORE_HOST,
+      path: endpoint,
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+        'Referer': 'https://www.sofascore.com/'
+      }
+    };
+
+    const req = https.request(options, (res) => {
+      let body = '';
+
+      res.setEncoding('utf8');
+
+      res.on('data', chunk => {
+        body += chunk;
+      });
+
+      res.on('end', () => {
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          return reject(
+            new Error(`SofaScore HTTP ${res.statusCode}`)
+          );
+        }
+
+        try {
+          resolve(JSON.parse(body));
+        } catch {
+          reject(new Error('Resposta inválida do SofaScore'));
+        }
       });
     });
-    req.on('error',reject);
-    req.setTimeout(10000,()=>req.destroy(new Error('Timeout')));
-    req.end(); // <- faltava isso: sem end(), a requisição nunca é finalizada e fica pendurada até estourar o timeout
+
+    req.on('error', err => {
+      reject(err);
+    });
+
+    req.setTimeout(12000, () => {
+      req.destroy(new Error('Timeout ao consultar SofaScore'));
+    });
+
+    req.end();
   });
 }
-function idFrom(s){
-  const x=String(s||'').trim();
-  if(/^\d{5,}$/.test(x)) return x;
-  let m=x.match(/#id:(\d{5,})/); if(m)return m[1];
-  m=x.match(/(?:event|match)[^#?]*?(\d{5,})(?:[#?]|$)/i); if(m)return m[1];
-  m=x.match(/\b(\d{6,})\b/); return m?m[1]:null;
-}
-const endpoints={
-  event:id=>`/api/v1/event/${id}`,
-  stats:id=>`/api/v1/event/${id}/statistics`,
-  incidents:id=>`/api/v1/event/${id}/incidents`,
-  lineups:id=>`/api/v1/event/${id}/lineups`,
-  graph:id=>`/api/v1/event/${id}/graph`,
-  momentum:id=>`/api/v1/event/${id}/momentum`
-};
-async function api(id){
-  const hit=cache.get(id);
-  if(hit && (Date.now()-hit.at)<CACHE_TTL_MS) return hit.data;
-  const out={};
-  for(const [k,fn] of Object.entries(endpoints)){
-    try{
-      out[k]=await requestJSON(fn(id));
-    }catch(e){
-      out[k]={
-        error:e.message,
-        friendly: e.message==='Timeout'
-          ? 'O servidor de dados não respondeu a tempo.'
-          : 'Não foi possível obter esses dados agora.'
-      };
-    }
+
+function getMatchId(value) {
+  const text = String(value || '').trim();
+
+  if (/^\d{5,}$/.test(text)) {
+    return text;
   }
-  cache.set(id,{at:Date.now(),data:out});
-  return out;
+
+  let match = text.match(/#id:(\d{5,})/i);
+  if (match) return match[1];
+
+  match = text.match(/\/(\d{5,})(?:[/?#]|$)/);
+  if (match) return match[1];
+
+  match = text.match(/\b(\d{6,})\b/);
+  if (match) return match[1];
+
+  return null;
 }
-const html=fs.readFileSync(path.join(__dirname,'public','index.html'));
-const server=http.createServer(async(req,res)=>{
-  try{
-    if(req.url.startsWith('/api/match')){
-      const u=new URL(req.url,'http://localhost'); const id=idFrom(u.searchParams.get('id')||u.searchParams.get('url'));
-      if(!id){res.writeHead(400,{'Content-Type':'application/json'});return res.end(JSON.stringify({error:'ID da partida não encontrado'}))}
-      const data=await api(id); res.writeHead(200,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'}); return res.end(JSON.stringify({id,data}));
+
+async function getEndpoint(endpoint) {
+  try {
+    return await requestJSON(endpoint);
+  } catch (error) {
+    return {
+      error: error.message
+    };
+  }
+}
+
+async function getMatchData(id) {
+  const cached = cache.get(id);
+
+  if (cached && Date.now() - cached.time < CACHE_TTL) {
+    return cached.data;
+  }
+
+  const base = `/api/v1/event/${id}`;
+
+  const [
+    event,
+    statistics,
+    incidents,
+    lineups,
+    graph,
+    momentum
+  ] = await Promise.all([
+    getEndpoint(base),
+    getEndpoint(`${base}/statistics`),
+    getEndpoint(`${base}/incidents`),
+    getEndpoint(`${base}/lineups`),
+    getEndpoint(`${base}/graph`),
+    getEndpoint(`${base}/momentum`)
+  ]);
+
+  const data = {
+    event,
+    statistics,
+    incidents,
+    lineups,
+    graph,
+    momentum
+  };
+
+  cache.set(id, {
+    time: Date.now(),
+    data
+  });
+
+  return data;
+}
+
+const indexPath = path.join(
+  __dirname,
+  'public',
+  'index.html'
+);
+
+const indexHTML = fs.readFileSync(
+  indexPath,
+  'utf8'
+);
+
+function sendJSON(res, status, data) {
+  res.writeHead(status, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'Access-Control-Allow-Origin': '*'
+  });
+
+  res.end(JSON.stringify(data));
+}
+
+const server = http.createServer(async (req, res) => {
+  try {
+    const url = new URL(
+      req.url,
+      `http://${req.headers.host || 'localhost'}`
+    );
+
+    if (url.pathname === '/api/match') {
+      const input =
+        url.searchParams.get('id') ||
+        url.searchParams.get('url');
+
+      const id = getMatchId(input);
+
+      if (!id) {
+        return sendJSON(res, 400, {
+          error: 'ID da partida não encontrado.'
+        });
+      }
+
+      const data = await getMatchData(id);
+
+      if (
+        data.event &&
+        data.event.error &&
+        !data.event.id
+      ) {
+        return sendJSON(res, 502, {
+          error: 'Não foi possível obter os dados da partida.',
+          details: data.event.error
+        });
+      }
+
+      return sendJSON(res, 200, {
+        ok: true,
+        id,
+        data
+      });
     }
-    res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});res.end(html);
-  }catch(e){res.writeHead(502,{'Content-Type':'application/json'});res.end(JSON.stringify({error:e.message}))}
+
+    if (
+      url.pathname === '/' ||
+      url.pathname === '/index.html'
+    ) {
+      res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-cache'
+      });
+
+      return res.end(indexHTML);
+    }
+
+    res.writeHead(404, {
+      'Content-Type': 'text/plain; charset=utf-8'
+    });
+
+    res.end('Página não encontrada.');
+  } catch (error) {
+    console.error(error);
+
+    sendJSON(res, 500, {
+      error: 'Erro interno do servidor.',
+      details: error.message
+    });
+  }
 });
-server.listen(PORT,()=>console.log('Live Match Stats V2 on '+PORT));
+
+server.listen(PORT, () => {
+  console.log(`Live Match Stats V3 rodando na porta ${PORT}`);
+});
