@@ -4,33 +4,30 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 
-<title>Live Match Stats V4</title>
+<title>Live Match Stats V5</title>
 
 <style>
-*{
-  box-sizing:border-box
-}
+*{box-sizing:border-box}
 
 body{
   margin:0;
   background:#0b0f14;
-  color:#f4f6f8;
-  font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif
+  color:#f5f7fa;
+  font-family:system-ui,sans-serif
 }
 
 .wrap{
-  max-width:1000px;
+  max-width:950px;
   margin:auto;
-  padding:18px
+  padding:16px
 }
 
 .card{
   background:#151b23;
-  border:1px solid #28313c;
-  border-radius:16px;
+  border:1px solid #29323d;
+  border-radius:15px;
   padding:16px;
-  margin:12px 0;
-  box-shadow:0 8px 30px rgba(0,0,0,.18)
+  margin:12px 0
 }
 
 h1,h2{
@@ -44,45 +41,34 @@ h1,h2{
 input{
   width:100%;
   padding:13px;
-  border-radius:11px;
-  border:1px solid #35404d;
-  background:#0c1117;
-  color:#fff;
-  font-size:15px;
-  outline:none
-}
-
-input:focus{
-  border-color:#718096
+  border-radius:10px;
+  border:1px solid #374250;
+  background:#0b1016;
+  color:white;
+  font-size:16px
 }
 
 button{
   border:0;
-  border-radius:10px;
+  border-radius:9px;
   padding:11px 15px;
   margin:9px 6px 0 0;
-  font-weight:750;
+  font-weight:800;
   cursor:pointer
 }
 
 .go{
-  background:#fff;
+  background:white;
   color:#111
 }
 
 .refresh{
   background:#303946;
-  color:#fff
+  color:white
 }
 
 button:disabled{
-  opacity:.5;
-  cursor:not-allowed
-}
-
-.status{
-  margin-top:12px;
-  min-height:22px
+  opacity:.5
 }
 
 .ok{
@@ -90,11 +76,11 @@ button:disabled{
 }
 
 .err{
-  color:#ff9494
+  color:#ff9696
 }
 
 .loading{
-  color:#f2d27a
+  color:#f1d27c
 }
 
 .match{
@@ -106,7 +92,7 @@ button:disabled{
 }
 
 .teams{
-  font-size:21px;
+  font-size:22px;
   font-weight:850
 }
 
@@ -119,23 +105,21 @@ button:disabled{
   display:inline-block;
   margin-top:7px;
   padding:5px 9px;
-  border-radius:999px;
-  background:#26303b;
-  color:#dce3ea;
+  border-radius:20px;
+  background:#29323d;
   font-size:12px;
   font-weight:700
 }
 
 .grid{
   display:grid;
-  grid-template-columns:repeat(2,minmax(0,1fr));
+  grid-template-columns:repeat(2,1fr);
   gap:9px
 }
 
 .stat{
-  background:#0e141b;
-  border:1px solid #202a34;
-  border-radius:11px;
+  background:#0d131a;
+  border-radius:10px;
   padding:12px
 }
 
@@ -145,16 +129,16 @@ button:disabled{
 }
 
 .val{
+  margin-top:4px;
   font-size:19px;
-  font-weight:800;
-  margin-top:4px
+  font-weight:800
 }
 
 .event{
-  padding:10px;
-  margin:7px 0;
-  background:#0e141b;
-  border-radius:10px
+  background:#0d131a;
+  padding:11px;
+  border-radius:9px;
+  margin:7px 0
 }
 
 .hidden{
@@ -162,18 +146,17 @@ button:disabled{
 }
 
 pre{
+  background:#080c11;
+  padding:10px;
+  border-radius:9px;
   white-space:pre-wrap;
   word-break:break-word;
-  max-height:450px;
+  max-height:400px;
   overflow:auto;
-  background:#080c11;
-  padding:12px;
-  border-radius:10px;
   font-size:12px
 }
 
 @media(max-width:600px){
-
   .grid{
     grid-template-columns:1fr
   }
@@ -193,118 +176,133 @@ pre{
 
 <div class="wrap">
 
-  <div class="card">
+<div class="card">
 
-    <h1>⚽ Live Match Stats V4</h1>
+<h1>⚽ Live Match Stats V5</h1>
 
-    <p class="muted">
-      Digite os dois times, por exemplo:
-      <b>FCSB x Sepsi</b>
-    </p>
+<p class="muted">
+Digite os dois times:
+</p>
 
-    <input
-      id="q"
-      placeholder="FCSB x Sepsi"
-      autocomplete="off"
-    >
+<input
+  id="q"
+  placeholder="Ex.: FCSB x Sepsi"
+>
 
-    <button
-      id="loadBtn"
-      class="go"
-      onclick="loadMatch()"
-    >
-      Carregar
-    </button>
+<button
+  id="load"
+  class="go"
+  onclick="loadMatch()"
+>
+Carregar
+</button>
 
-    <button
-      id="refreshBtn"
-      class="refresh"
-      onclick="loadMatch(true)"
-    >
-      🔄 Atualizar
-    </button>
+<button
+  id="refresh"
+  class="refresh"
+  onclick="loadMatch(true)"
+>
+🔄 Atualizar
+</button>
 
-    <div id="msg" class="status muted"></div>
-
-  </div>
-
-  <div id="game" class="card hidden">
-
-    <div class="match">
-
-      <div>
-
-        <div
-          id="teams"
-          class="teams"
-        >
-          -
-        </div>
-
-        <div
-          id="status"
-          class="badge"
-        >
-          -
-        </div>
-
-      </div>
-
-      <div
-        id="score"
-        class="score"
-      >
-        - x -
-      </div>
-
-    </div>
-
-  </div>
-
-  <div id="statsCard" class="card hidden">
-
-    <h2>📊 Estatísticas</h2>
-
-    <div
-      id="statsGrid"
-      class="grid"
-    ></div>
-
-  </div>
-
-  <div id="eventsCard" class="card hidden">
-
-    <h2>🚨 Eventos</h2>
-
-    <div id="events"></div>
-
-  </div>
-
-  <div id="rawCard" class="card hidden">
-
-    <h2>🔧 Dados da API</h2>
-
-    <pre id="raw"></pre>
-
-  </div>
+<div
+  id="msg"
+  class="muted"
+></div>
 
 </div>
 
+
+<div
+  id="game"
+  class="card hidden"
+>
+
+<div class="match">
+
+<div>
+
+<div
+  id="teams"
+  class="teams"
+>
+-
+</div>
+
+<div
+  id="status"
+  class="badge"
+>
+-
+</div>
+
+</div>
+
+<div
+  id="score"
+  class="score"
+>
+- x -
+</div>
+
+</div>
+
+</div>
+
+
+<div
+  id="statsCard"
+  class="card hidden"
+>
+
+<h2>📊 Estatísticas</h2>
+
+<div
+  id="stats"
+  class="grid"
+></div>
+
+</div>
+
+
+<div
+  id="eventsCard"
+  class="card hidden"
+>
+
+<h2>🚨 Eventos</h2>
+
+<div id="events"></div>
+
+</div>
+
+
+<div
+  id="rawCard"
+  class="card hidden"
+>
+
+<h2>🔧 Dados recebidos</h2>
+
+<pre id="raw"></pre>
+
+</div>
+
+</div>
+
+
 <script>
 
-let currentInput = '';
-
-function setMessage(text,type='muted'){
+function message(text,type='muted'){
 
   const el =
     document.getElementById('msg');
 
-  el.className =
-    'status '+type;
+  el.className=type;
 
-  el.textContent =
-    text;
+  el.textContent=text;
 }
+
 
 function show(id){
 
@@ -314,6 +312,7 @@ function show(id){
     .remove('hidden');
 }
 
+
 function hide(id){
 
   document
@@ -322,53 +321,90 @@ function hide(id){
     .add('hidden');
 }
 
+
 function escapeHTML(value){
 
   return String(value ?? '')
     .replace(/&/g,'&amp;')
     .replace(/</g,'&lt;')
     .replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;')
-    .replace(/'/g,'&#039;');
+    .replace(/"/g,'&quot;');
 }
 
-function addStat(name,home,away){
 
-  const grid =
-    document.getElementById('statsGrid');
+function renderMatch(data){
 
-  const div =
-    document.createElement('div');
+  const fixture =
+    data.fixture;
 
-  div.className='stat';
+  if(!fixture){
 
-  div.innerHTML =
-    '<div class="name">'+
-      escapeHTML(name)+
-    '</div>'+
-    '<div class="val">'+
-      escapeHTML(home ?? '-')+
-      ' × '+
-      escapeHTML(away ?? '-')+
-    '</div>';
+    throw new Error(
+      'A API não retornou a partida.'
+    );
+  }
 
-  grid.appendChild(div);
+  const home =
+    fixture.teams?.home?.name ||
+    'Casa';
+
+  const away =
+    fixture.teams?.away?.name ||
+    'Fora';
+
+  const homeScore =
+    fixture.goals?.home ?? 0;
+
+  const awayScore =
+    fixture.goals?.away ?? 0;
+
+  const status =
+    fixture.fixture?.status?.long ||
+    fixture.fixture?.status?.short ||
+    '-';
+
+  document
+    .getElementById('teams')
+    .textContent =
+      home+' x '+away;
+
+  document
+    .getElementById('score')
+    .textContent =
+      homeScore+' x '+awayScore;
+
+  document
+    .getElementById('status')
+    .textContent =
+      status;
+
+  show('game');
+
+  renderStats(
+    data.statistics
+  );
+
+  renderEvents(
+    data.events
+  );
 }
 
-function renderStatistics(statistics){
 
-  const grid =
-    document.getElementById('statsGrid');
+function renderStats(statistics){
 
-  grid.innerHTML='';
+  const box =
+    document.getElementById('stats');
+
+  box.innerHTML='';
 
   if(
-    !Array.isArray(statistics) ||
+    !statistics ||
     !statistics.length
   ){
-    grid.innerHTML =
+
+    box.innerHTML =
       '<div class="muted">'+
-      'Estatísticas não disponíveis para esta partida.'+
+      'Estatísticas não disponíveis.'+
       '</div>';
 
     show('statsCard');
@@ -376,45 +412,41 @@ function renderStatistics(statistics){
     return;
   }
 
-  statistics.forEach(teamData=>{
+  statistics.forEach(team=>{
 
     const teamName =
-      teamData.team?.name ||
+      team.team?.name ||
       'Equipe';
 
-    const items =
-      teamData.statistics || [];
+    (team.statistics || [])
+      .forEach(stat=>{
 
-    items.forEach(item=>{
+        const div =
+          document.createElement('div');
 
-      if(
-        item.type === undefined &&
-        item.value === undefined
-      ){
-        return;
-      }
+        div.className='stat';
 
-      let value =
-        item.value;
+        div.innerHTML =
+          '<div class="name">'+
+          escapeHTML(
+            teamName+
+            ' — '+
+            stat.type
+          )+
+          '</div>'+
+          '<div class="val">'+
+          escapeHTML(
+            stat.value ?? '-'
+          )+
+          '</div>';
 
-      if(
-        value === null ||
-        value === undefined
-      ){
-        value='-';
-      }
-
-      addStat(
-        teamName+' — '+item.type,
-        value,
-        ''
-      );
-    });
-
+        box.appendChild(div);
+      });
   });
 
   show('statsCard');
 }
+
 
 function renderEvents(events){
 
@@ -424,9 +456,10 @@ function renderEvents(events){
   box.innerHTML='';
 
   if(
-    !Array.isArray(events) ||
+    !events ||
     !events.length
   ){
+
     box.innerHTML =
       '<div class="muted">'+
       'Nenhum evento disponível.'+
@@ -447,26 +480,13 @@ function renderEvents(events){
 
       div.className='event';
 
-      const minute =
-        event.time?.elapsed ??
-        '';
+      let text='';
 
-      const team =
-        event.team?.name ??
-        '';
-
-      const player =
-        event.player?.name ??
-        '';
-
-      const assist =
-        event.assist?.name ??
-        '';
-
-      let text =
-        minute
-        ? minute+"' — "
-        : '';
+      if(event.time?.elapsed){
+        text +=
+          event.time.elapsed+
+          "' — ";
+      }
 
       text +=
         event.type ||
@@ -477,19 +497,14 @@ function renderEvents(events){
           ' — '+event.detail;
       }
 
-      if(team){
+      if(event.team?.name){
         text +=
-          ' — '+team;
+          ' — '+event.team.name;
       }
 
-      if(player){
+      if(event.player?.name){
         text +=
-          ' — '+player;
-      }
-
-      if(assist){
-        text +=
-          ' — assistência: '+assist;
+          ' — '+event.player.name;
       }
 
       div.textContent=text;
@@ -500,65 +515,8 @@ function renderEvents(events){
   show('eventsCard');
 }
 
-function renderMatch(data){
 
-  const fixture =
-    data.fixture;
-
-  if(!fixture){
-    throw new Error(
-      'A API não retornou os dados da partida.'
-    );
-  }
-
-  const home =
-    fixture.teams?.home?.name ||
-    'Casa';
-
-  const away =
-    fixture.teams?.away?.name ||
-    'Fora';
-
-  const homeGoals =
-    fixture.goals?.home ??
-    0;
-
-  const awayGoals =
-    fixture.goals?.away ??
-    0;
-
-  const status =
-    fixture.fixture?.status?.long ||
-    fixture.fixture?.status?.short ||
-    '-';
-
-  document
-    .getElementById('teams')
-    .textContent =
-      home+' x '+away;
-
-  document
-    .getElementById('score')
-    .textContent =
-      homeGoals+' x '+awayGoals;
-
-  document
-    .getElementById('status')
-    .textContent =
-      status;
-
-  show('game');
-
-  renderStatistics(
-    data.statistics
-  );
-
-  renderEvents(
-    data.events
-  );
-}
-
-async function loadMatch(refresh=false){
+async function loadMatch(){
 
   const input =
     document
@@ -568,29 +526,25 @@ async function loadMatch(refresh=false){
 
   if(!input){
 
-    setMessage(
-      'Digite os nomes dos dois times.',
+    message(
+      'Digite os dois times.',
       'err'
     );
 
     return;
   }
 
-  currentInput=input;
+  const load =
+    document.getElementById('load');
 
-  const loadBtn =
-    document.getElementById('loadBtn');
+  const refresh =
+    document.getElementById('refresh');
 
-  const refreshBtn =
-    document.getElementById('refreshBtn');
+  load.disabled=true;
+  refresh.disabled=true;
 
-  loadBtn.disabled=true;
-  refreshBtn.disabled=true;
-
-  setMessage(
-    refresh
-      ? 'Atualizando partida...'
-      : 'Procurando a partida...',
+  message(
+    '🔎 Procurando partida...',
     'loading'
   );
 
@@ -600,38 +554,22 @@ async function loadMatch(refresh=false){
       await fetch(
         '/api/match?q='+
         encodeURIComponent(input)+
-        '&t='+Date.now(),
+        '&t='+
+        Date.now(),
         {
           cache:'no-store'
         }
       );
 
-    let result;
-
-    try{
-      result =
-        await response.json();
-    }catch{
-      throw new Error(
-        'O servidor retornou uma resposta inválida.'
-      );
-    }
+    const result =
+      await response.json();
 
     if(!response.ok){
 
       throw new Error(
         result.details ||
         result.error ||
-        'Erro ao consultar a API.'
-      );
-    }
-
-    if(!result.ok){
-
-      throw new Error(
-        result.details ||
-        result.error ||
-        'Partida não encontrada.'
+        'Erro no servidor.'
       );
     }
 
@@ -650,8 +588,8 @@ async function loadMatch(refresh=false){
 
     show('rawCard');
 
-    setMessage(
-      'Partida carregada com sucesso.',
+    message(
+      '✅ Dados carregados.',
       'ok'
     );
 
@@ -659,24 +597,25 @@ async function loadMatch(refresh=false){
 
     console.error(error);
 
-    setMessage(
+    message(
       'Erro: '+error.message,
       'err'
     );
 
   }finally{
 
-    loadBtn.disabled=false;
-    refreshBtn.disabled=false;
+    load.disabled=false;
+    refresh.disabled=false;
   }
 }
+
 
 document
   .getElementById('q')
   .addEventListener(
     'keydown',
-    event=>{
-      if(event.key==='Enter'){
+    e=>{
+      if(e.key==='Enter'){
         loadMatch();
       }
     }
