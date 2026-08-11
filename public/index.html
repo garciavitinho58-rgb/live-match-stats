@@ -3,10 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Live Match Stats V3</title>
+
+<title>Live Match Stats V4</title>
 
 <style>
-*{box-sizing:border-box}
+*{
+  box-sizing:border-box
+}
 
 body{
   margin:0;
@@ -30,7 +33,7 @@ body{
   box-shadow:0 8px 30px rgba(0,0,0,.18)
 }
 
-h1,h2,h3{
+h1,h2{
   margin-top:0
 }
 
@@ -94,27 +97,27 @@ button:disabled{
   color:#f2d27a
 }
 
-.match-head{
+.match{
   display:flex;
-  align-items:center;
   justify-content:space-between;
+  align-items:center;
   gap:15px;
   flex-wrap:wrap
 }
 
 .teams{
   font-size:21px;
-  font-weight:800
+  font-weight:850
 }
 
 .score{
   font-size:38px;
-  font-weight:900;
-  white-space:nowrap
+  font-weight:900
 }
 
 .badge{
   display:inline-block;
+  margin-top:7px;
   padding:5px 9px;
   border-radius:999px;
   background:#26303b;
@@ -147,26 +150,30 @@ button:disabled{
   margin-top:4px
 }
 
-.section{
-  margin-top:18px
-}
-
-pre{
-  white-space:pre-wrap;
-  word-break:break-word;
-  max-height:420px;
-  overflow:auto;
-  background:#080c11;
-  border-radius:10px;
-  padding:12px;
-  font-size:12px
+.event{
+  padding:10px;
+  margin:7px 0;
+  background:#0e141b;
+  border-radius:10px
 }
 
 .hidden{
   display:none
 }
 
+pre{
+  white-space:pre-wrap;
+  word-break:break-word;
+  max-height:450px;
+  overflow:auto;
+  background:#080c11;
+  padding:12px;
+  border-radius:10px;
+  font-size:12px
+}
+
 @media(max-width:600px){
+
   .grid{
     grid-template-columns:1fr
   }
@@ -188,23 +195,32 @@ pre{
 
   <div class="card">
 
-    <h1>⚽ Live Match Stats V3</h1>
+    <h1>⚽ Live Match Stats V4</h1>
 
     <p class="muted">
-      Cole o link ou o ID da partida do SofaScore.
+      Digite os dois times, por exemplo:
+      <b>FCSB x Sepsi</b>
     </p>
 
     <input
       id="q"
-      placeholder="Ex.: https://www.sofascore.com/...#id:15502641"
+      placeholder="FCSB x Sepsi"
       autocomplete="off"
     >
 
-    <button class="go" id="loadBtn" onclick="loadMatch()">
-      Carregar partida
+    <button
+      id="loadBtn"
+      class="go"
+      onclick="loadMatch()"
+    >
+      Carregar
     </button>
 
-    <button class="refresh" id="refreshBtn" onclick="loadMatch(true)">
+    <button
+      id="refreshBtn"
+      class="refresh"
+      onclick="loadMatch(true)"
+    >
       🔄 Atualizar
     </button>
 
@@ -214,14 +230,32 @@ pre{
 
   <div id="game" class="card hidden">
 
-    <div class="match-head">
+    <div class="match">
 
       <div>
-        <div id="teams" class="teams">-</div>
-        <div id="status" class="badge">-</div>
+
+        <div
+          id="teams"
+          class="teams"
+        >
+          -
+        </div>
+
+        <div
+          id="status"
+          class="badge"
+        >
+          -
+        </div>
+
       </div>
 
-      <div id="score" class="score">- x -</div>
+      <div
+        id="score"
+        class="score"
+      >
+        - x -
+      </div>
 
     </div>
 
@@ -231,21 +265,24 @@ pre{
 
     <h2>📊 Estatísticas</h2>
 
-    <div id="statsGrid" class="grid"></div>
+    <div
+      id="statsGrid"
+      class="grid"
+    ></div>
 
   </div>
 
-  <div id="incidentsCard" class="card hidden">
+  <div id="eventsCard" class="card hidden">
 
-    <h2>🚨 Incidentes</h2>
+    <h2>🚨 Eventos</h2>
 
-    <div id="incidents"></div>
+    <div id="events"></div>
 
   </div>
 
   <div id="rawCard" class="card hidden">
 
-    <h2>🔧 Dados recebidos</h2>
+    <h2>🔧 Dados da API</h2>
 
     <pre id="raw"></pre>
 
@@ -254,43 +291,39 @@ pre{
 </div>
 
 <script>
-let currentId = null;
-let timer = null;
 
-function getId(value){
-  const text = String(value || '').trim();
-
-  if(/^\d{5,}$/.test(text)){
-    return text;
-  }
-
-  let m = text.match(/#id:(\d{5,})/i);
-  if(m) return m[1];
-
-  m = text.match(/\/(\d{5,})(?:[/?#]|$)/);
-  if(m) return m[1];
-
-  m = text.match(/\b(\d{6,})\b/);
-  if(m) return m[1];
-
-  return null;
-}
+let currentInput = '';
 
 function setMessage(text,type='muted'){
-  const el=document.getElementById('msg');
-  el.className='status '+type;
-  el.textContent=text;
+
+  const el =
+    document.getElementById('msg');
+
+  el.className =
+    'status '+type;
+
+  el.textContent =
+    text;
 }
 
 function show(id){
-  document.getElementById(id).classList.remove('hidden');
+
+  document
+    .getElementById(id)
+    .classList
+    .remove('hidden');
 }
 
 function hide(id){
-  document.getElementById(id).classList.add('hidden');
+
+  document
+    .getElementById(id)
+    .classList
+    .add('hidden');
 }
 
 function escapeHTML(value){
+
   return String(value ?? '')
     .replace(/&/g,'&amp;')
     .replace(/</g,'&lt;')
@@ -299,172 +332,285 @@ function escapeHTML(value){
     .replace(/'/g,'&#039;');
 }
 
-function findEvent(data){
-  if(!data) return null;
-
-  if(data.event && data.event.id){
-    return data.event;
-  }
-
-  return null;
-}
-
 function addStat(name,home,away){
-  const grid=document.getElementById('statsGrid');
 
-  const div=document.createElement('div');
+  const grid =
+    document.getElementById('statsGrid');
+
+  const div =
+    document.createElement('div');
+
   div.className='stat';
 
-  div.innerHTML=
-    '<div class="name">'+escapeHTML(name)+'</div>'+
+  div.innerHTML =
+    '<div class="name">'+
+      escapeHTML(name)+
+    '</div>'+
     '<div class="val">'+
-    escapeHTML(home ?? '-')+
-    ' × '+
-    escapeHTML(away ?? '-')+
+      escapeHTML(home ?? '-')+
+      ' × '+
+      escapeHTML(away ?? '-')+
     '</div>';
 
   grid.appendChild(div);
 }
 
-function parseStatistics(stats){
-  const grid=document.getElementById('statsGrid');
+function renderStatistics(statistics){
+
+  const grid =
+    document.getElementById('statsGrid');
 
   grid.innerHTML='';
 
-  if(!stats || stats.error){
+  if(
+    !Array.isArray(statistics) ||
+    !statistics.length
+  ){
+    grid.innerHTML =
+      '<div class="muted">'+
+      'Estatísticas não disponíveis para esta partida.'+
+      '</div>';
+
+    show('statsCard');
+
     return;
   }
 
-  const periods=stats.statistics || [];
+  statistics.forEach(teamData=>{
 
-  let found=0;
+    const teamName =
+      teamData.team?.name ||
+      'Equipe';
 
-  periods.forEach(period=>{
-    if(!period.groups) return;
+    const items =
+      teamData.statistics || [];
 
-    period.groups.forEach(group=>{
-      if(!group.statisticsItems) return;
+    items.forEach(item=>{
 
-      group.statisticsItems.forEach(item=>{
-        if(
-          item.name === undefined ||
-          item.home === undefined &&
-          item.away === undefined
-        ){
-          return;
-        }
+      if(
+        item.type === undefined &&
+        item.value === undefined
+      ){
+        return;
+      }
 
-        addStat(
-          item.name,
-          item.home,
-          item.away
-        );
+      let value =
+        item.value;
 
-        found++;
-      });
+      if(
+        value === null ||
+        value === undefined
+      ){
+        value='-';
+      }
+
+      addStat(
+        teamName+' — '+item.type,
+        value,
+        ''
+      );
     });
+
   });
 
-  if(found){
-    show('statsCard');
-  }
+  show('statsCard');
 }
 
-function parseIncidents(data){
-  const box=document.getElementById('incidents');
+function renderEvents(events){
+
+  const box =
+    document.getElementById('events');
 
   box.innerHTML='';
 
-  if(!data || data.error){
+  if(
+    !Array.isArray(events) ||
+    !events.length
+  ){
+    box.innerHTML =
+      '<div class="muted">'+
+      'Nenhum evento disponível.'+
+      '</div>';
+
+    show('eventsCard');
+
     return;
   }
 
-  const incidents=data.incidents || [];
+  events
+    .slice()
+    .reverse()
+    .forEach(event=>{
 
-  if(!incidents.length){
-    box.innerHTML='<span class="muted">Nenhum incidente disponível.</span>';
-    show('incidentsCard');
-    return;
+      const div =
+        document.createElement('div');
+
+      div.className='event';
+
+      const minute =
+        event.time?.elapsed ??
+        '';
+
+      const team =
+        event.team?.name ??
+        '';
+
+      const player =
+        event.player?.name ??
+        '';
+
+      const assist =
+        event.assist?.name ??
+        '';
+
+      let text =
+        minute
+        ? minute+"' — "
+        : '';
+
+      text +=
+        event.type ||
+        'Evento';
+
+      if(event.detail){
+        text +=
+          ' — '+event.detail;
+      }
+
+      if(team){
+        text +=
+          ' — '+team;
+      }
+
+      if(player){
+        text +=
+          ' — '+player;
+      }
+
+      if(assist){
+        text +=
+          ' — assistência: '+assist;
+      }
+
+      div.textContent=text;
+
+      box.appendChild(div);
+    });
+
+  show('eventsCard');
+}
+
+function renderMatch(data){
+
+  const fixture =
+    data.fixture;
+
+  if(!fixture){
+    throw new Error(
+      'A API não retornou os dados da partida.'
+    );
   }
 
-  incidents.slice(0,30).forEach(item=>{
-    const div=document.createElement('div');
+  const home =
+    fixture.teams?.home?.name ||
+    'Casa';
 
-    div.className='stat';
-    div.style.marginBottom='8px';
+  const away =
+    fixture.teams?.away?.name ||
+    'Fora';
 
-    let text='';
+  const homeGoals =
+    fixture.goals?.home ??
+    0;
 
-    if(item.time !== undefined){
-      text += item.time+"' — ";
-    }
+  const awayGoals =
+    fixture.goals?.away ??
+    0;
 
-    if(item.isHome){
-      text += 'Casa — ';
-    }else if(item.isHome === false){
-      text += 'Fora — ';
-    }
+  const status =
+    fixture.fixture?.status?.long ||
+    fixture.fixture?.status?.short ||
+    '-';
 
-    text +=
-      item.incidentClass ||
-      item.incidentType ||
-      item.type ||
-      'Incidente';
+  document
+    .getElementById('teams')
+    .textContent =
+      home+' x '+away;
 
-    if(item.player && item.player.name){
-      text += ' — '+item.player.name;
-    }
+  document
+    .getElementById('score')
+    .textContent =
+      homeGoals+' x '+awayGoals;
 
-    div.textContent=text;
+  document
+    .getElementById('status')
+    .textContent =
+      status;
 
-    box.appendChild(div);
-  });
+  show('game');
 
-  show('incidentsCard');
+  renderStatistics(
+    data.statistics
+  );
+
+  renderEvents(
+    data.events
+  );
 }
 
 async function loadMatch(refresh=false){
 
-  const input=document.getElementById('q').value;
-  const id=getId(input);
+  const input =
+    document
+      .getElementById('q')
+      .value
+      .trim();
 
-  if(!id){
+  if(!input){
+
     setMessage(
-      'Não encontrei o ID. Cole o link completo ou apenas o ID da partida.',
+      'Digite os nomes dos dois times.',
       'err'
     );
+
     return;
   }
 
-  currentId=id;
+  currentInput=input;
 
-  const loadBtn=document.getElementById('loadBtn');
-  const refreshBtn=document.getElementById('refreshBtn');
+  const loadBtn =
+    document.getElementById('loadBtn');
+
+  const refreshBtn =
+    document.getElementById('refreshBtn');
 
   loadBtn.disabled=true;
   refreshBtn.disabled=true;
 
   setMessage(
     refresh
-      ? 'Atualizando dados...'
-      : 'Buscando dados da partida...',
+      ? 'Atualizando partida...'
+      : 'Procurando a partida...',
     'loading'
   );
 
   try{
 
-    const response=await fetch(
-      '/api/match?id='+encodeURIComponent(id)+
-      '&t='+Date.now(),
-      {
-        cache:'no-store'
-      }
-    );
+    const response =
+      await fetch(
+        '/api/match?q='+
+        encodeURIComponent(input)+
+        '&t='+Date.now(),
+        {
+          cache:'no-store'
+        }
+      );
 
     let result;
 
     try{
-      result=await response.json();
+      result =
+        await response.json();
     }catch{
       throw new Error(
         'O servidor retornou uma resposta inválida.'
@@ -472,66 +618,40 @@ async function loadMatch(refresh=false){
     }
 
     if(!response.ok){
+
       throw new Error(
-        result.error ||
         result.details ||
-        'Não foi possível obter os dados.'
+        result.error ||
+        'Erro ao consultar a API.'
       );
     }
 
     if(!result.ok){
+
       throw new Error(
+        result.details ||
         result.error ||
-        'Não foi possível obter os dados.'
+        'Partida não encontrada.'
       );
     }
 
-    const data=result.data;
-    const event=findEvent(data);
+    renderMatch(
+      result.data
+    );
 
-    if(!event){
-      throw new Error(
-        'A partida não foi encontrada ou o SofaScore não respondeu.'
-      );
-    }
-
-    const home=event.homeTeam?.name || 'Casa';
-    const away=event.awayTeam?.name || 'Fora';
-
-    const homeScore=
-      event.homeScore?.current ??
-      event.homeScore?.normaltime ??
-      0;
-
-    const awayScore=
-      event.awayScore?.current ??
-      event.awayScore?.normaltime ??
-      0;
-
-    document.getElementById('teams').textContent=
-      home+' x '+away;
-
-    document.getElementById('score').textContent=
-      homeScore+' x '+awayScore;
-
-    document.getElementById('status').textContent=
-      event.status?.description ||
-      event.status?.type ||
-      '-';
-
-    show('game');
-
-    parseStatistics(data.statistics);
-
-    parseIncidents(data.incidents);
-
-    document.getElementById('raw').textContent=
-      JSON.stringify(result,null,2);
+    document
+      .getElementById('raw')
+      .textContent =
+        JSON.stringify(
+          result,
+          null,
+          2
+        );
 
     show('rawCard');
 
     setMessage(
-      'Atualizado com sucesso • ID '+id,
+      'Partida carregada com sucesso.',
       'ok'
     );
 
@@ -551,23 +671,17 @@ async function loadMatch(refresh=false){
   }
 }
 
-document.getElementById('q').addEventListener(
-  'keydown',
-  event=>{
-    if(event.key==='Enter'){
-      loadMatch();
+document
+  .getElementById('q')
+  .addEventListener(
+    'keydown',
+    event=>{
+      if(event.key==='Enter'){
+        loadMatch();
+      }
     }
-  }
-);
+  );
 
-window.addEventListener(
-  'beforeunload',
-  ()=>{
-    if(timer){
-      clearInterval(timer);
-    }
-  }
-);
 </script>
 
 </body>
