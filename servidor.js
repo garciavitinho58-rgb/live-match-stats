@@ -1,4 +1,3 @@
-
 const http = require('http');
 const https = require('https');
 const fs = require('fs');
@@ -6,18 +5,15 @@ const path = require('path');
 
 const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.API_FOOTBALL_KEY;
+
 const API_HOST = 'v3.football.api-sports.io';
 
-const CACHE_TTL = 15000;
-const cache = new Map();
-
-function requestAPI(endpoint) {
+function api(endpoint) {
   return new Promise((resolve, reject) => {
 
     if (!API_KEY) {
-      return reject(
-        new Error('API_FOOTBALL_KEY não configurada no Render.')
-      );
+      reject(new Error('API_FOOTBALL_KEY não configurada.'));
+      return;
     }
 
     const req = https.request({
@@ -26,14 +22,11 @@ function requestAPI(endpoint) {
       method: 'GET',
       headers: {
         'x-apisports-key': API_KEY,
-        'Accept': 'application/json',
-        'User-Agent': 'LiveMatchStats/4.0'
+        'Accept': 'application/json'
       }
     }, res => {
 
       let body = '';
-
-      res.setEncoding('utf8');
 
       res.on('data', chunk => {
         body += chunk;
@@ -41,32 +34,26 @@ function requestAPI(endpoint) {
 
       res.on('end', () => {
 
-        if (res.statusCode < 200 || res.statusCode >= 300) {
-          return reject(
-            new Error(
-              `API-Football HTTP ${res.statusCode}: ${body.slice(0, 300)}`
-            )
-          );
-        }
-
         try {
 
           const json = JSON.parse(body);
 
-          if (
-            json.errors &&
-            Object.keys(json.errors).length
-          ) {
-            return reject(
+          if (json.errors &&
+              Object.keys(json.errors).length) {
+
+            reject(
               new Error(
                 JSON.stringify(json.errors)
               )
             );
+
+            return;
           }
 
           resolve(json);
 
-        } catch {
+        } catch (e) {
+
           reject(
             new Error(
               'Resposta inválida da API-Football.'
@@ -78,8 +65,9 @@ function requestAPI(endpoint) {
 
     req.on('error', reject);
 
-    req.setTimeout(12000, () => {
-      req.destroy(
+    req.setTimeout(10000, () => {
+      req.destroy();
+      reject(
         new Error('Timeout da API-Football.')
       );
     });
@@ -88,324 +76,236 @@ function requestAPI(endpoint) {
   });
 }
 
-function normalize(value) {
-  return String(value || '')
+function normalize(text) {
+
+  return String(text || '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .trim();
 }
 
-function parseTeams(value) {
+function parseTeams(text) {
 
-  const text =
-    String(value || '').trim();
-
-  const match =
-    text.match(
+  const m = String(text || '')
+    .trim()
+    .match(
       /^(.+?)\s+(?:x|vs\.?|versus|-)\s+(.+)$/i
     );
 
-  if (!match) {
+  if (!m) {
     return null;
   }
 
   return {
-    home: match[1].trim(),
-    away: match[2].trim()
+    home: m[1].trim(),
+    away: m[2].trim()
   };
 }
 
 async function findTeam(name) {
 
-  const data =
-    await requestAPI(
-      `/teams?search=${encodeURIComponent(name)}`
+  const result =
+    await api(
+      '/teams?search=' +
+      encodeURIComponent(name)
     );
 
-  const teams =
-    data.response || [];
+  const list =
+    result.response || [];
 
-  if (!teams.length) {
+  if (!list.length) {
     throw new Error(
-      `Time não encontrado: ${name}`
+      'Time não encontrado: ' + name
     );
   }
 
   const exact =
-    teams.find(
-      item =>
-        normalize(item.team.name) ===
+    list.find(
+      x =>
+        normalize(x.team.name) ===
         normalize(name)
     );
 
   return (
-    exact ||
-    teams[0]
+    exact || list[0]
   ).team;
 }
 
-function formatDate(date) {
+async function findLiveFixture(home, away) {
 
-  const year =
-    date.getFullYear();
+  const result =
+    await api('/fixtures?live=all');
 
-  const month =
-    String(
-      date.getMonth() + 1
-    ).padStart(2, '0');
+  const games =
+    result.response || [];
 
-  const day =
-    String(
-      date.getDate()
-    ).padStart(2, '0');
+  const h =
+    normalize(home);
 
-  return `${year}-${month}-${day}`;
+  const a =
+    normalize(away);
+
+  const game =
+    games.find(f => {
+
+      const homeName =
+        normalize(
+          f.teams?.home?.name
+        );
+
+      const awayName =
+        normalize(
+          f.teams?.away?.name
+        );
+
+      return (
+        homeName === h &&
+        awayName === a
+      ) ||
+      (
+        homeName === a &&
+        awayName === h
+      );
+    });
+
+  return game || null;
 }
 
-async function fixturesByDate(date) {
-
-  return requestAPI(
-    `/fixtures?date=${date}`
-  );
-}
-
-async function findFixture(input) {
-
-  const text =
-    String(input || '').trim();
+async function findFixture(home, away) {
 
   /*
-   * Se for um ID numérico, tratamos como
-   * ID da API-Football.
+   * PRIMEIRO:
+   * tenta encontrar a partida ao vivo.
    */
 
-  if (/^\d{4,7}$/.test(text)) {
-
-    const data =
-      await requestAPI(
-        `/fixtures?id=${text}`
-      );
-
-    if (
-      !data.response ||
-      !data.response.length
-    ) {
-      throw new Error(
-        'Partida não encontrada pelo ID da API-Football.'
-      );
-    }
-
-    return data.response[0];
-  }
-
-  const teams =
-    parseTeams(text);
-
-  if (!teams) {
-
-    throw new Error(
-      'Digite os times no formato: Time A x Time B'
+  const live =
+    await findLiveFixture(
+      home,
+      away
     );
+
+  if (live) {
+    return live;
   }
 
-  const homeTeam =
-    await findTeam(teams.home);
-
-  const awayTeam =
-    await findTeam(teams.away);
-
   /*
-   * O plano gratuito não permite "last".
+   * SEGUNDO:
+   * usa a data atual.
    *
-   * Por isso consultamos partidas por DATA.
-   *
-   * Primeiro hoje.
-   * Depois alguns dias anteriores.
+   * O plano gratuito permite
+   * a janela indicada pela API.
    */
-
-  const dates = [];
 
   const today =
     new Date();
 
-  for (let i = 0; i <= 7; i++) {
+  const yyyy =
+    today.getFullYear();
 
-    const d =
-      new Date(today);
+  const mm =
+    String(
+      today.getMonth() + 1
+    ).padStart(2, '0');
 
-    d.setDate(
-      today.getDate() - i
+  const dd =
+    String(
+      today.getDate()
+    ).padStart(2, '0');
+
+  const date =
+    `${yyyy}-${mm}-${dd}`;
+
+  const result =
+    await api(
+      '/fixtures?date=' + date
     );
 
-    dates.push(
-      formatDate(d)
-    );
-  }
+  const games =
+    result.response || [];
 
-  /*
-   * Também verificamos alguns dias futuros.
-   */
+  const h =
+    normalize(home);
 
-  for (let i = 1; i <= 7; i++) {
+  const a =
+    normalize(away);
 
-    const d =
-      new Date(today);
+  const game =
+    games.find(f => {
 
-    d.setDate(
-      today.getDate() + i
-    );
-
-    dates.push(
-      formatDate(d)
-    );
-  }
-
-  for (const date of dates) {
-
-    const data =
-      await fixturesByDate(date);
-
-    const fixtures =
-      data.response || [];
-
-    const found =
-      fixtures.find(fixture => {
-
-        const h =
-          normalize(
-            fixture.teams?.home?.name
-          );
-
-        const a =
-          normalize(
-            fixture.teams?.away?.name
-          );
-
-        return (
-          (
-            h === normalize(teams.home) &&
-            a === normalize(teams.away)
-          ) ||
-          (
-            h === normalize(teams.away) &&
-            a === normalize(teams.home)
-          )
+      const homeName =
+        normalize(
+          f.teams?.home?.name
         );
-      });
 
-    if (found) {
-      return found;
-    }
-  }
+      const awayName =
+        normalize(
+          f.teams?.away?.name
+        );
 
-  throw new Error(
-    `Não encontrei ${teams.home} x ${teams.away} nos próximos/últimos dias consultados.`
-  );
+      return (
+        homeName === h &&
+        awayName === a
+      ) ||
+      (
+        homeName === a &&
+        awayName === h
+      );
+    });
+
+  return game || null;
 }
 
-async function getMatchData(fixtureId) {
-
-  const key =
-    String(fixtureId);
-
-  const cached =
-    cache.get(key);
-
-  if (
-    cached &&
-    Date.now() - cached.time <
-    CACHE_TTL
-  ) {
-    return cached.data;
-  }
+async function matchData(fixtureId) {
 
   const fixture =
-    await requestAPI(
-      `/fixtures?id=${fixtureId}`
+    await api(
+      '/fixtures?id=' +
+      fixtureId
     );
 
   const statistics =
-    await requestAPI(
-      `/fixtures/statistics?fixture=${fixtureId}`
+    await api(
+      '/fixtures/statistics?fixture=' +
+      fixtureId
     );
 
   const events =
-    await requestAPI(
-      `/fixtures/events?fixture=${fixtureId}`
+    await api(
+      '/fixtures/events?fixture=' +
+      fixtureId
     );
 
-  let lineups = {
-    response: []
-  };
-
-  try {
-
-    lineups =
-      await requestAPI(
-        `/fixtures/lineups?fixture=${fixtureId}`
-      );
-
-  } catch (error) {
-
-    console.log(
-      'Lineups indisponíveis:',
-      error.message
-    );
-  }
-
-  const data = {
+  return {
 
     fixture:
-      fixture.response?.[0] ||
-      null,
+      fixture.response?.[0] || null,
 
     statistics:
-      statistics.response ||
-      [],
+      statistics.response || [],
 
     events:
-      events.response ||
-      [],
-
-    lineups:
-      lineups.response ||
-      []
+      events.response || []
   };
-
-  cache.set(key, {
-    time: Date.now(),
-    data
-  });
-
-  return data;
 }
 
-const indexPath =
-  path.join(
-    __dirname,
-    'public',
-    'index.html'
-  );
-
-const indexHTML =
+const html =
   fs.readFileSync(
-    indexPath,
+    path.join(
+      __dirname,
+      'public',
+      'index.html'
+    ),
     'utf8'
   );
 
-function sendJSON(
-  res,
-  status,
-  data
-) {
+function json(res, status, data) {
 
   res.writeHead(
     status,
     {
       'Content-Type':
         'application/json; charset=utf-8',
-
       'Cache-Control':
         'no-store'
     }
@@ -425,7 +325,7 @@ const server =
         const url =
           new URL(
             req.url,
-            `http://${req.headers.host || 'localhost'}`
+            'http://localhost'
           );
 
         if (
@@ -433,43 +333,83 @@ const server =
           '/api/match'
         ) {
 
-          const input =
-            url.searchParams.get('q') ||
-            url.searchParams.get('id');
+          const q =
+            url.searchParams.get('q');
 
-          if (!input) {
+          if (!q) {
 
-            return sendJSON(
+            return json(
               res,
               400,
               {
                 error:
-                  'Informe os dois times no formato Time A x Time B.'
+                  'Digite os dois times.'
               }
             );
           }
 
+          const teams =
+            parseTeams(q);
+
+          if (!teams) {
+
+            return json(
+              res,
+              400,
+              {
+                error:
+                  'Use o formato: Time A x Time B'
+              }
+            );
+          }
+
+          /*
+           * Confirmamos que os times
+           * existem na API.
+           */
+
+          await findTeam(
+            teams.home
+          );
+
+          await findTeam(
+            teams.away
+          );
+
           const fixture =
-            await findFixture(input);
-
-          const fixtureId =
-            fixture.fixture.id;
-
-          const data =
-            await getMatchData(
-              fixtureId
+            await findFixture(
+              teams.home,
+              teams.away
             );
 
-          return sendJSON(
+          if (!fixture) {
+
+            return json(
+              res,
+              404,
+              {
+                error:
+                  'Partida não encontrada.',
+                details:
+                  'Verifique os nomes dos times ou se a partida está na janela disponível do plano gratuito.'
+              }
+            );
+          }
+
+          const data =
+            await matchData(
+              fixture.fixture.id
+            );
+
+          return json(
             res,
             200,
             {
               ok: true,
               source:
                 'API-Football',
-
-              fixtureId,
-
+              fixtureId:
+                fixture.fixture.id,
               data
             }
           );
@@ -484,44 +424,28 @@ const server =
             200,
             {
               'Content-Type':
-                'text/html; charset=utf-8',
-
-              'Cache-Control':
-                'no-cache'
+                'text/html; charset=utf-8'
             }
           );
 
-          return res.end(
-            indexHTML
-          );
+          return res.end(html);
         }
 
-        res.writeHead(
-          404,
-          {
-            'Content-Type':
-              'text/plain; charset=utf-8'
-          }
-        );
-
+        res.writeHead(404);
         res.end(
           'Página não encontrada.'
         );
 
       } catch (error) {
 
-        console.error(
-          'ERRO:',
-          error
-        );
+        console.error(error);
 
-        return sendJSON(
+        json(
           res,
           500,
           {
             error:
-              'Não foi possível obter os dados agora.',
-
+              'Erro ao consultar a API.',
             details:
               error.message
           }
@@ -533,10 +457,9 @@ const server =
 server.listen(
   PORT,
   () => {
-
     console.log(
-      `Live Match Stats V4 API-Football rodando na porta ${PORT}`
+      'Live Match Stats V5 ativo na porta ' +
+      PORT
     );
-
   }
 );
