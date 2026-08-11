@@ -1,43 +1,574 @@
-<!doctype html><html lang="pt-BR"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Live Match Stats V2</title>
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Live Match Stats V3</title>
+
 <style>
-body{margin:0;background:#0e1217;color:#f4f6f8;font-family:system-ui,sans-serif}.wrap{max-width:950px;margin:auto;padding:18px}
-.card{background:#171c23;border:1px solid #2a313b;border-radius:14px;padding:15px;margin:12px 0}
-input{width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid #3a4350;background:#0c1015;color:white;font-size:15px}
-button{padding:11px 15px;border:0;border-radius:9px;margin:9px 6px 0 0;font-weight:700;cursor:pointer}.go{background:white;color:#111}.refresh{background:#303844;color:white}
-h1{margin:0}.muted{color:#9aa4b2}.score{font-size:34px;font-weight:800}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}.stat{padding:12px;background:#0e1319;border-radius:10px}.name{font-size:12px;color:#9aa4b2}.val{font-size:19px;font-weight:750;margin-top:4px}.err{color:#ff9292}.ok{color:#8fe29a}
-pre{white-space:pre-wrap;word-break:break-word;max-height:450px;overflow:auto;background:#0b0f14;padding:10px;border-radius:9px}
-</style></head><body><div class="wrap">
-<div class="card"><h1>⚽ Live Match Stats V2</h1><p class="muted">Cole o link ou o ID da partida do SofaScore.</p>
-<input id="q" placeholder="https://www.sofascore.com/...#id:15502641">
-<button class="go" onclick="load()">Carregar</button><button class="refresh" onclick="load(true)">🔄 Atualizar</button>
-<div id="msg" class="muted"></div></div>
-<div id="game" class="card" hidden><h2 id="teams"></h2><div id="score" class="score"></div><div id="desc" class="muted"></div></div>
-<div id="stats" class="card" hidden><h2>📊 Estatísticas</h2><div id="grid" class="grid"></div></div>
-<div id="extra" class="card" hidden><h2>🧩 Endpoints</h2><p class="muted">A V2 consulta evento, estatísticas, incidentes, escalações e gráfico/momentum quando disponíveis.</p><pre id="raw"></pre></div>
-</div>
-<script>
-let last='';
-function idFrom(s){s=s.trim();if(/^\d{5,}$/.test(s))return s;let m=s.match(/#id:(\d{5,})/);if(m)return m[1];m=s.match(/\b(\d{6,})\b/);return m?m[1]:null}
-function msg(t,c='muted'){document.getElementById('msg').className=c;document.getElementById('msg').textContent=t}
-function flatten(x,a=[]){if(!x||typeof x!=='object')return a;if(Array.isArray(x)){x.forEach(v=>flatten(v,a));return a}
-if(x.name!==undefined&&(x.home!==undefined||x.away!==undefined))a.push([x.name,x.home,x.away]);
-Object.values(x).forEach(v=>flatten(v,a));return a}
-async function load(refresh=false){
- const q=document.getElementById('q').value;const id=idFrom(q);if(!id){msg('ID não encontrado. Cole o link completo do SofaScore.','err');return}
- last=id;msg('Buscando dados no servidor...');try{
- const r=await fetch('/api/match?id='+encodeURIComponent(id),{cache:'no-store'});const j=await r.json();if(!r.ok)throw Error(j.error||'Erro');
- const e=j.data.event?.event;
- if(!e){const err=j.data.event;throw Error(err?.friendly||err?.error||'Partida não encontrada')}
- document.getElementById('game').hidden=false;
- document.getElementById('teams').textContent=(e.homeTeam?.name||'Casa')+' x '+(e.awayTeam?.name||'Fora');
- document.getElementById('score').textContent=(e.homeScore?.current??'-')+' x '+(e.awayScore?.current??'-');
- document.getElementById('desc').textContent=e.status?.description||e.status?.type||'';
- const rows=flatten(j.data.stats);const grid=document.getElementById('grid');grid.innerHTML='';
- const seen=new Set();rows.filter(r=>{let k=r.join('|');if(seen.has(k))return false;seen.add(k);return true}).slice(0,100).forEach(r=>{let d=document.createElement('div');d.className='stat';d.innerHTML='<div class="name">'+r[0]+'</div><div class="val">'+(r[1]??'-')+' × '+(r[2]??'-')+'</div>';grid.appendChild(d)});
- document.getElementById('stats').hidden=false;document.getElementById('extra').hidden=false;
- document.getElementById('raw').textContent=JSON.stringify(j.data,null,2);msg('Atualizado com sucesso.','ok');
- }catch(e){msg('Erro: '+e.message,'err')}
+*{box-sizing:border-box}
+
+body{
+  margin:0;
+  background:#0b0f14;
+  color:#f4f6f8;
+  font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif
 }
-</script></body></html>
+
+.wrap{
+  max-width:1000px;
+  margin:auto;
+  padding:18px
+}
+
+.card{
+  background:#151b23;
+  border:1px solid #28313c;
+  border-radius:16px;
+  padding:16px;
+  margin:12px 0;
+  box-shadow:0 8px 30px rgba(0,0,0,.18)
+}
+
+h1,h2,h3{
+  margin-top:0
+}
+
+.muted{
+  color:#9ca7b5
+}
+
+input{
+  width:100%;
+  padding:13px;
+  border-radius:11px;
+  border:1px solid #35404d;
+  background:#0c1117;
+  color:#fff;
+  font-size:15px;
+  outline:none
+}
+
+input:focus{
+  border-color:#718096
+}
+
+button{
+  border:0;
+  border-radius:10px;
+  padding:11px 15px;
+  margin:9px 6px 0 0;
+  font-weight:750;
+  cursor:pointer
+}
+
+.go{
+  background:#fff;
+  color:#111
+}
+
+.refresh{
+  background:#303946;
+  color:#fff
+}
+
+button:disabled{
+  opacity:.5;
+  cursor:not-allowed
+}
+
+.status{
+  margin-top:12px;
+  min-height:22px
+}
+
+.ok{
+  color:#8fe29a
+}
+
+.err{
+  color:#ff9494
+}
+
+.loading{
+  color:#f2d27a
+}
+
+.match-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:15px;
+  flex-wrap:wrap
+}
+
+.teams{
+  font-size:21px;
+  font-weight:800
+}
+
+.score{
+  font-size:38px;
+  font-weight:900;
+  white-space:nowrap
+}
+
+.badge{
+  display:inline-block;
+  padding:5px 9px;
+  border-radius:999px;
+  background:#26303b;
+  color:#dce3ea;
+  font-size:12px;
+  font-weight:700
+}
+
+.grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:9px
+}
+
+.stat{
+  background:#0e141b;
+  border:1px solid #202a34;
+  border-radius:11px;
+  padding:12px
+}
+
+.name{
+  color:#9ca7b5;
+  font-size:12px
+}
+
+.val{
+  font-size:19px;
+  font-weight:800;
+  margin-top:4px
+}
+
+.section{
+  margin-top:18px
+}
+
+pre{
+  white-space:pre-wrap;
+  word-break:break-word;
+  max-height:420px;
+  overflow:auto;
+  background:#080c11;
+  border-radius:10px;
+  padding:12px;
+  font-size:12px
+}
+
+.hidden{
+  display:none
+}
+
+@media(max-width:600px){
+  .grid{
+    grid-template-columns:1fr
+  }
+
+  .teams{
+    font-size:18px
+  }
+
+  .score{
+    font-size:32px
+  }
+}
+</style>
+</head>
+
+<body>
+
+<div class="wrap">
+
+  <div class="card">
+
+    <h1>⚽ Live Match Stats V3</h1>
+
+    <p class="muted">
+      Cole o link ou o ID da partida do SofaScore.
+    </p>
+
+    <input
+      id="q"
+      placeholder="Ex.: https://www.sofascore.com/...#id:15502641"
+      autocomplete="off"
+    >
+
+    <button class="go" id="loadBtn" onclick="loadMatch()">
+      Carregar partida
+    </button>
+
+    <button class="refresh" id="refreshBtn" onclick="loadMatch(true)">
+      🔄 Atualizar
+    </button>
+
+    <div id="msg" class="status muted"></div>
+
+  </div>
+
+  <div id="game" class="card hidden">
+
+    <div class="match-head">
+
+      <div>
+        <div id="teams" class="teams">-</div>
+        <div id="status" class="badge">-</div>
+      </div>
+
+      <div id="score" class="score">- x -</div>
+
+    </div>
+
+  </div>
+
+  <div id="statsCard" class="card hidden">
+
+    <h2>📊 Estatísticas</h2>
+
+    <div id="statsGrid" class="grid"></div>
+
+  </div>
+
+  <div id="incidentsCard" class="card hidden">
+
+    <h2>🚨 Incidentes</h2>
+
+    <div id="incidents"></div>
+
+  </div>
+
+  <div id="rawCard" class="card hidden">
+
+    <h2>🔧 Dados recebidos</h2>
+
+    <pre id="raw"></pre>
+
+  </div>
+
+</div>
+
+<script>
+let currentId = null;
+let timer = null;
+
+function getId(value){
+  const text = String(value || '').trim();
+
+  if(/^\d{5,}$/.test(text)){
+    return text;
+  }
+
+  let m = text.match(/#id:(\d{5,})/i);
+  if(m) return m[1];
+
+  m = text.match(/\/(\d{5,})(?:[/?#]|$)/);
+  if(m) return m[1];
+
+  m = text.match(/\b(\d{6,})\b/);
+  if(m) return m[1];
+
+  return null;
+}
+
+function setMessage(text,type='muted'){
+  const el=document.getElementById('msg');
+  el.className='status '+type;
+  el.textContent=text;
+}
+
+function show(id){
+  document.getElementById(id).classList.remove('hidden');
+}
+
+function hide(id){
+  document.getElementById(id).classList.add('hidden');
+}
+
+function escapeHTML(value){
+  return String(value ?? '')
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#039;');
+}
+
+function findEvent(data){
+  if(!data) return null;
+
+  if(data.event && data.event.id){
+    return data.event;
+  }
+
+  return null;
+}
+
+function addStat(name,home,away){
+  const grid=document.getElementById('statsGrid');
+
+  const div=document.createElement('div');
+  div.className='stat';
+
+  div.innerHTML=
+    '<div class="name">'+escapeHTML(name)+'</div>'+
+    '<div class="val">'+
+    escapeHTML(home ?? '-')+
+    ' × '+
+    escapeHTML(away ?? '-')+
+    '</div>';
+
+  grid.appendChild(div);
+}
+
+function parseStatistics(stats){
+  const grid=document.getElementById('statsGrid');
+
+  grid.innerHTML='';
+
+  if(!stats || stats.error){
+    return;
+  }
+
+  const periods=stats.statistics || [];
+
+  let found=0;
+
+  periods.forEach(period=>{
+    if(!period.groups) return;
+
+    period.groups.forEach(group=>{
+      if(!group.statisticsItems) return;
+
+      group.statisticsItems.forEach(item=>{
+        if(
+          item.name === undefined ||
+          item.home === undefined &&
+          item.away === undefined
+        ){
+          return;
+        }
+
+        addStat(
+          item.name,
+          item.home,
+          item.away
+        );
+
+        found++;
+      });
+    });
+  });
+
+  if(found){
+    show('statsCard');
+  }
+}
+
+function parseIncidents(data){
+  const box=document.getElementById('incidents');
+
+  box.innerHTML='';
+
+  if(!data || data.error){
+    return;
+  }
+
+  const incidents=data.incidents || [];
+
+  if(!incidents.length){
+    box.innerHTML='<span class="muted">Nenhum incidente disponível.</span>';
+    show('incidentsCard');
+    return;
+  }
+
+  incidents.slice(0,30).forEach(item=>{
+    const div=document.createElement('div');
+
+    div.className='stat';
+    div.style.marginBottom='8px';
+
+    let text='';
+
+    if(item.time !== undefined){
+      text += item.time+"' — ";
+    }
+
+    if(item.isHome){
+      text += 'Casa — ';
+    }else if(item.isHome === false){
+      text += 'Fora — ';
+    }
+
+    text +=
+      item.incidentClass ||
+      item.incidentType ||
+      item.type ||
+      'Incidente';
+
+    if(item.player && item.player.name){
+      text += ' — '+item.player.name;
+    }
+
+    div.textContent=text;
+
+    box.appendChild(div);
+  });
+
+  show('incidentsCard');
+}
+
+async function loadMatch(refresh=false){
+
+  const input=document.getElementById('q').value;
+  const id=getId(input);
+
+  if(!id){
+    setMessage(
+      'Não encontrei o ID. Cole o link completo ou apenas o ID da partida.',
+      'err'
+    );
+    return;
+  }
+
+  currentId=id;
+
+  const loadBtn=document.getElementById('loadBtn');
+  const refreshBtn=document.getElementById('refreshBtn');
+
+  loadBtn.disabled=true;
+  refreshBtn.disabled=true;
+
+  setMessage(
+    refresh
+      ? 'Atualizando dados...'
+      : 'Buscando dados da partida...',
+    'loading'
+  );
+
+  try{
+
+    const response=await fetch(
+      '/api/match?id='+encodeURIComponent(id)+
+      '&t='+Date.now(),
+      {
+        cache:'no-store'
+      }
+    );
+
+    let result;
+
+    try{
+      result=await response.json();
+    }catch{
+      throw new Error(
+        'O servidor retornou uma resposta inválida.'
+      );
+    }
+
+    if(!response.ok){
+      throw new Error(
+        result.error ||
+        result.details ||
+        'Não foi possível obter os dados.'
+      );
+    }
+
+    if(!result.ok){
+      throw new Error(
+        result.error ||
+        'Não foi possível obter os dados.'
+      );
+    }
+
+    const data=result.data;
+    const event=findEvent(data);
+
+    if(!event){
+      throw new Error(
+        'A partida não foi encontrada ou o SofaScore não respondeu.'
+      );
+    }
+
+    const home=event.homeTeam?.name || 'Casa';
+    const away=event.awayTeam?.name || 'Fora';
+
+    const homeScore=
+      event.homeScore?.current ??
+      event.homeScore?.normaltime ??
+      0;
+
+    const awayScore=
+      event.awayScore?.current ??
+      event.awayScore?.normaltime ??
+      0;
+
+    document.getElementById('teams').textContent=
+      home+' x '+away;
+
+    document.getElementById('score').textContent=
+      homeScore+' x '+awayScore;
+
+    document.getElementById('status').textContent=
+      event.status?.description ||
+      event.status?.type ||
+      '-';
+
+    show('game');
+
+    parseStatistics(data.statistics);
+
+    parseIncidents(data.incidents);
+
+    document.getElementById('raw').textContent=
+      JSON.stringify(result,null,2);
+
+    show('rawCard');
+
+    setMessage(
+      'Atualizado com sucesso • ID '+id,
+      'ok'
+    );
+
+  }catch(error){
+
+    console.error(error);
+
+    setMessage(
+      'Erro: '+error.message,
+      'err'
+    );
+
+  }finally{
+
+    loadBtn.disabled=false;
+    refreshBtn.disabled=false;
+  }
+}
+
+document.getElementById('q').addEventListener(
+  'keydown',
+  event=>{
+    if(event.key==='Enter'){
+      loadMatch();
+    }
+  }
+);
+
+window.addEventListener(
+  'beforeunload',
+  ()=>{
+    if(timer){
+      clearInterval(timer);
+    }
+  }
+);
+</script>
+
+</body>
+</html>
