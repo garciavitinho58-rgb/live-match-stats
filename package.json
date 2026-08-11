@@ -1,7 +1,11 @@
 {
-  "name":"live-match-stats-v2",
-  "version":"1.0.0",
-  "private":true,
-  "scripts":{"start":"node server.js"},
-  "engines":{"node":">=18"}
+  "name": "live-match-stats-v3",
+  "version": "3.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node servidor.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
 }
