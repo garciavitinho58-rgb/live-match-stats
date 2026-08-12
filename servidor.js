@@ -19,13 +19,44 @@ const API_FOOTBALL_HOST =
 
 /*
 ========================================================
- UTILIDADES
+ LIVE MATCH STATS V4
+========================================================
+
+ Fonte principal:
+   SportMonks
+
+ Fonte secundária:
+   API-Football
+
+ Objetivos:
+   - jogos do dia
+   - próximos jogos
+   - jogos ao vivo
+   - partidas por ID
+   - busca por equipes
+   - placares
+   - eventos
+   - estatísticas
+   - odds
+   - xG quando disponível
+   - base preparada para análise automática
+
+ IMPORTANTE:
+   Não solicitar "predictions" nos endpoints
+   gerais, pois o token atual não possui acesso
+   a esse include.
+========================================================
+*/
+
+/*
+========================================================
+ UTILIDADES HTTP
 ========================================================
 */
 
 function requestHttps({
   hostname,
-  path,
+  path: requestPath,
   headers = {},
   timeout = 15000
 }) {
@@ -34,7 +65,7 @@ function requestHttps({
     const req = https.request(
       {
         hostname,
-        path,
+        path: requestPath,
         method: 'GET',
         headers: {
           Accept: 'application/json',
@@ -70,9 +101,7 @@ function requestHttps({
           ) {
             reject(
               new Error(
-                `HTTP ${res.statusCode}: ${
-                  JSON.stringify(json)
-                }`
+                `HTTP ${res.statusCode}: ${JSON.stringify(json)}`
               )
             );
             return;
@@ -87,6 +116,7 @@ function requestHttps({
 
     req.setTimeout(timeout, () => {
       req.destroy();
+
       reject(
         new Error('Timeout da API.')
       );
@@ -131,7 +161,7 @@ function sportmonks(pathname) {
 
 /*
 ========================================================
- API-FOOTBALL - FONTE SECUNDÁRIA
+ API-FOOTBALL
 ========================================================
 */
 
@@ -171,6 +201,12 @@ function normalize(text) {
     .trim();
 }
 
+/*
+========================================================
+ DATAS
+========================================================
+*/
+
 function todayISO() {
 
   const now =
@@ -197,40 +233,57 @@ function addDaysISO(
   days
 ) {
 
-  const d =
+  const date =
     new Date(
       `${dateString}T00:00:00Z`
     );
 
-  d.setUTCDate(
-    d.getUTCDate() + days
+  date.setUTCDate(
+    date.getUTCDate() + days
   );
 
-  return d
+  return date
     .toISOString()
     .slice(0, 10);
 }
 
+/*
+========================================================
+ PARSE TIMES
+========================================================
+*/
+
 function parseTeams(text) {
 
-  const m =
+  const match =
     String(text || '')
       .trim()
       .match(
         /^(.+?)\s+(?:x|vs\.?|versus|-)\s+(.+)$/i
       );
 
-  if (!m) {
+  if (!match) {
     return null;
   }
 
   return {
-    home: m[1].trim(),
-    away: m[2].trim()
+    home:
+      match[1].trim(),
+
+    away:
+      match[2].trim()
   };
 }
 
-function fixtureTeams(fixture) {
+/*
+========================================================
+ PARTICIPANTES
+========================================================
+*/
+
+function fixtureTeams(
+  fixture
+) {
 
   const participants =
     fixture?.participants || [];
@@ -238,17 +291,26 @@ function fixtureTeams(fixture) {
   let home = null;
   let away = null;
 
-  for (const team of participants) {
+  for (
+    const participant
+    of participants
+  ) {
 
     const location =
-      team?.meta?.location;
+      participant?.meta?.location;
 
-    if (location === 'home') {
-      home = team;
+    if (
+      location === 'home'
+    ) {
+      home =
+        participant;
     }
 
-    if (location === 'away') {
-      away = team;
+    if (
+      location === 'away'
+    ) {
+      away =
+        participant;
     }
   }
 
@@ -258,6 +320,12 @@ function fixtureTeams(fixture) {
   };
 }
 
+/*
+========================================================
+ COMPARAR TIMES
+========================================================
+*/
+
 function fixtureMatches(
   fixture,
   home,
@@ -265,7 +333,9 @@ function fixtureMatches(
 ) {
 
   const teams =
-    fixtureTeams(fixture);
+    fixtureTeams(
+      fixture
+    );
 
   if (
     !teams.home ||
@@ -301,13 +371,34 @@ function fixtureMatches(
 
 /*
 ========================================================
- INCLUDES
+ INCLUDES SEGUROS
 ========================================================
 
-A SportMonks pode limitar a quantidade de níveis de
-relacionamentos por requisição dependendo do endpoint/
-plano. Por isso mantemos uma lista centralizada.
+ NÃO contém predictions.
+
+ A ideia é evitar que um recurso sem permissão
+ bloqueie toda a consulta.
+========================================================
 */
+
+const TODAY_INCLUDES =
+  [
+    'participants',
+    'league',
+    'state',
+    'scores'
+  ].join(';');
+
+const LIVE_INCLUDES =
+  [
+    'participants',
+    'league',
+    'state',
+    'scores',
+    'events.type',
+    'events.player',
+    'statistics'
+  ].join(';');
 
 const FIXTURE_INCLUDES =
   [
@@ -321,16 +412,12 @@ const FIXTURE_INCLUDES =
     'events.player',
     'statistics',
     'odds.market',
-    'odds.bookmaker',
-    'predictions.type',
-    'lineups.player',
-    'lineups.xGlineup.type',
-    'xGFixture.type'
+    'odds.bookmaker'
   ].join(';');
 
 /*
 ========================================================
- PARTIDA POR ID
+ FIXTURE POR ID
 ========================================================
 */
 
@@ -347,12 +434,15 @@ async function getSportmonksFixture(
       )}`
     );
 
-  return result?.data || null;
+  return (
+    result?.data ||
+    null
+  );
 }
 
 /*
 ========================================================
- JOGOS DE UMA DATA
+ JOGOS DO DIA
 ========================================================
 */
 
@@ -365,11 +455,14 @@ async function getFixturesByDate(
       `/v3/football/fixtures/date/${encodeURIComponent(
         date
       )}?include=${encodeURIComponent(
-        'participants;league;state;scores;odds.market;odds.bookmaker;predictions.type'
+        TODAY_INCLUDES
       )}`
     );
 
-  return result?.data || [];
+  return (
+    result?.data ||
+    []
+  );
 }
 
 /*
@@ -390,16 +483,19 @@ async function getFixturesBetween(
       )}/${encodeURIComponent(
         end
       )}?include=${encodeURIComponent(
-        'participants;league;state;scores;odds.market;odds.bookmaker;predictions.type'
+        TODAY_INCLUDES
       )}`
     );
 
-  return result?.data || [];
+  return (
+    result?.data ||
+    []
+  );
 }
 
 /*
 ========================================================
- AO VIVO
+ JOGOS AO VIVO
 ========================================================
 */
 
@@ -408,16 +504,131 @@ async function getLiveFixtures() {
   const result =
     await sportmonks(
       `/v3/football/livescores/inplay?include=${encodeURIComponent(
-        'participants;league;state;scores;events.type;events.player;statistics'
+        LIVE_INCLUDES
       )}`
     );
 
-  return result?.data || [];
+  return (
+    result?.data ||
+    []
+  );
 }
 
 /*
 ========================================================
- PROCURAR PARTIDA
+ ODDS DE UMA PARTIDA
+========================================================
+
+ Separado para que uma limitação de odds não
+ impeça a partida de ser carregada.
+========================================================
+*/
+
+async function getFixtureOdds(
+  fixtureId
+) {
+
+  try {
+
+    const result =
+      await sportmonks(
+        `/v3/football/fixtures/${encodeURIComponent(
+          fixtureId
+        )}?include=${encodeURIComponent(
+          'odds.market;odds.bookmaker'
+        )}`
+      );
+
+    return (
+      result?.data?.odds ||
+      []
+    );
+
+  } catch (error) {
+
+    console.error(
+      'Odds indisponíveis:',
+      error.message
+    );
+
+    return [];
+  }
+}
+
+/*
+========================================================
+ ESTATÍSTICAS DE UMA PARTIDA
+========================================================
+*/
+
+async function getFixtureStatistics(
+  fixtureId
+) {
+
+  try {
+
+    const result =
+      await sportmonks(
+        `/v3/football/fixtures/${encodeURIComponent(
+          fixtureId
+        )}?include=statistics`
+      );
+
+    return (
+      result?.data?.statistics ||
+      []
+    );
+
+  } catch (error) {
+
+    console.error(
+      'Estatísticas indisponíveis:',
+      error.message
+    );
+
+    return [];
+  }
+}
+
+/*
+========================================================
+ XG DE UMA PARTIDA
+========================================================
+*/
+
+async function getFixtureXG(
+  fixtureId
+) {
+
+  try {
+
+    const result =
+      await sportmonks(
+        `/v3/football/fixtures/${encodeURIComponent(
+          fixtureId
+        )}?include=xGFixture.type`
+      );
+
+    return (
+      result?.data?.xgfixture ||
+      result?.data?.xGFixture ||
+      []
+    );
+
+  } catch (error) {
+
+    console.error(
+      'xG indisponível:',
+      error.message
+    );
+
+    return [];
+  }
+}
+
+/*
+========================================================
+ BUSCAR PARTIDA
 ========================================================
 */
 
@@ -427,7 +638,7 @@ async function findSportmonksFixture(
 ) {
 
   /*
-   * 1. Primeiro procura ao vivo.
+   * 1 — AO VIVO
    */
 
   try {
@@ -452,13 +663,13 @@ async function findSportmonksFixture(
   } catch (error) {
 
     console.error(
-      'Erro ao consultar jogos ao vivo:',
+      'Erro no ao vivo:',
       error.message
     );
   }
 
   /*
-   * 2. Depois procura hoje.
+   * 2 — HOJE
    */
 
   const today =
@@ -484,7 +695,7 @@ async function findSportmonksFixture(
   }
 
   /*
-   * 3. Procura os próximos dias.
+   * 3 — PRÓXIMOS 7 DIAS
    */
 
   const end =
@@ -499,7 +710,7 @@ async function findSportmonksFixture(
       end
     );
 
-  const foundFuture =
+  return (
     future.find(
       fixture =>
         fixtureMatches(
@@ -507,14 +718,14 @@ async function findSportmonksFixture(
           home,
           away
         )
-    );
-
-  return foundFuture || null;
+    ) ||
+    null
+  );
 }
 
 /*
 ========================================================
- LISTA DE JOGOS DO DIA
+ DADOS DO DIA
 ========================================================
 */
 
@@ -530,7 +741,8 @@ async function getTodayData() {
 
   return {
     date,
-    count: fixtures.length,
+    count:
+      fixtures.length,
     fixtures
   };
 }
@@ -572,14 +784,15 @@ async function getUpcomingData(
   return {
     start,
     end,
-    count: fixtures.length,
+    count:
+      fixtures.length,
     fixtures
   };
 }
 
 /*
 ========================================================
- API-FOOTBALL FALLBACK
+ API-FOOTBALL — AO VIVO
 ========================================================
 */
 
@@ -600,7 +813,8 @@ async function findApiFootballFixture(
       );
 
     const games =
-      result.response || [];
+      result?.response ||
+      [];
 
     const h =
       normalize(home);
@@ -610,16 +824,16 @@ async function findApiFootballFixture(
 
     return (
       games.find(
-        f => {
+        game => {
 
           const homeName =
             normalize(
-              f.teams?.home?.name
+              game.teams?.home?.name
             );
 
           const awayName =
             normalize(
-              f.teams?.away?.name
+              game.teams?.away?.name
             );
 
           return (
@@ -630,13 +844,14 @@ async function findApiFootballFixture(
             awayName === h
           );
         }
-      ) || null
+      ) ||
+      null
     );
 
   } catch (error) {
 
     console.error(
-      'Fallback API-Football:',
+      'API-Football fallback:',
       error.message
     );
 
@@ -646,7 +861,7 @@ async function findApiFootballFixture(
 
 /*
 ========================================================
- RESUMO NORMALIZADO
+ RESUMO DA PARTIDA
 ========================================================
 */
 
@@ -655,10 +870,13 @@ function buildMatchSummary(
 ) {
 
   const teams =
-    fixtureTeams(fixture);
+    fixtureTeams(
+      fixture
+    );
 
   const scores =
-    fixture?.scores || [];
+    fixture?.scores ||
+    [];
 
   const currentScores =
     scores.filter(
@@ -673,8 +891,8 @@ function buildMatchSummary(
 
     const score =
       currentScores.find(
-        s =>
-          s.participant_id ===
+        item =>
+          item.participant_id ===
           participantId
       );
 
@@ -687,34 +905,45 @@ function buildMatchSummary(
   return {
 
     id:
-      fixture?.id ?? null,
+      fixture?.id ??
+      null,
 
     name:
-      fixture?.name ?? null,
+      fixture?.name ??
+      null,
 
     starting_at:
-      fixture?.starting_at ?? null,
+      fixture?.starting_at ??
+      null,
 
     timestamp:
       fixture?.starting_at_timestamp ??
       null,
 
     state:
-      fixture?.state || null,
+      fixture?.state ??
+      null,
 
     league:
-      fixture?.league || null,
+      fixture?.league ??
+      null,
 
     venue:
-      fixture?.venue || null,
+      fixture?.venue ??
+      null,
 
     home:
       teams.home
         ? {
-            id: teams.home.id,
-            name: teams.home.name,
+            id:
+              teams.home.id,
+
+            name:
+              teams.home.name,
+
             short_code:
               teams.home.short_code,
+
             score:
               scoreFor(
                 teams.home.id
@@ -725,10 +954,15 @@ function buildMatchSummary(
     away:
       teams.away
         ? {
-            id: teams.away.id,
-            name: teams.away.name,
+            id:
+              teams.away.id,
+
+            name:
+              teams.away.name,
+
             short_code:
               teams.away.short_code,
+
             score:
               scoreFor(
                 teams.away.id
@@ -737,7 +971,8 @@ function buildMatchSummary(
         : null,
 
     has_odds:
-      fixture?.has_odds ?? false,
+      fixture?.has_odds ??
+      false,
 
     has_premium_odds:
       fixture?.has_premium_odds ??
@@ -767,25 +1002,24 @@ try {
 
 } catch {
 
-  html =
-    `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <title>Live Match Stats V3</title>
-    </head>
-    <body>
-      <h1>Live Match Stats V3</h1>
-      <p>Servidor funcionando.</p>
-    </body>
-    </html>
-    `;
+  html = `
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Live Match Stats V4</title>
+</head>
+<body>
+<h1>Live Match Stats V4</h1>
+<p>Servidor funcionando.</p>
+</body>
+</html>
+`;
 }
 
 /*
 ========================================================
- JSON RESPONSE
+ JSON
 ========================================================
 */
 
@@ -826,7 +1060,10 @@ function json(
 
 const server =
   http.createServer(
-    async (req, res) => {
+    async (
+      req,
+      res
+    ) => {
 
       try {
 
@@ -838,7 +1075,7 @@ const server =
 
         /*
         ================================================
-        HEALTH CHECK
+        HEALTH
         ================================================
         */
 
@@ -852,8 +1089,9 @@ const server =
             200,
             {
               ok: true,
+
               service:
-                'Live Match Stats V3',
+                'Live Match Stats V4',
 
               sportmonks:
                 Boolean(
@@ -874,7 +1112,133 @@ const server =
 
         /*
         ================================================
-        PARTIDA POR ID
+        TODAY
+        ================================================
+        */
+
+        if (
+          url.pathname ===
+          '/api/today'
+        ) {
+
+          const data =
+            await getTodayData();
+
+          return json(
+            res,
+            200,
+            {
+              ok: true,
+
+              source:
+                'SportMonks',
+
+              date:
+                data.date,
+
+              count:
+                data.count,
+
+              fixtures:
+                data.fixtures,
+
+              summaries:
+                data.fixtures.map(
+                  buildMatchSummary
+                )
+            }
+          );
+        }
+
+        /*
+        ================================================
+        UPCOMING
+        ================================================
+        */
+
+        if (
+          url.pathname ===
+          '/api/upcoming'
+        ) {
+
+          const days =
+            url.searchParams.get(
+              'days'
+            ) || 7;
+
+          const data =
+            await getUpcomingData(
+              days
+            );
+
+          return json(
+            res,
+            200,
+            {
+              ok: true,
+
+              source:
+                'SportMonks',
+
+              start:
+                data.start,
+
+              end:
+                data.end,
+
+              count:
+                data.count,
+
+              fixtures:
+                data.fixtures,
+
+              summaries:
+                data.fixtures.map(
+                  buildMatchSummary
+                )
+            }
+          );
+        }
+
+        /*
+        ================================================
+        LIVE
+        ================================================
+        */
+
+        if (
+          url.pathname ===
+          '/api/live'
+        ) {
+
+          const fixtures =
+            await getLiveFixtures();
+
+          return json(
+            res,
+            200,
+            {
+              ok: true,
+
+              source:
+                'SportMonks',
+
+              count:
+                fixtures.length,
+
+              fixtures,
+
+              summaries:
+                fixtures.map(
+                  buildMatchSummary
+                )
+            }
+          );
+        }
+
+        /*
+        ================================================
+        FIXTURE POR ID
         ================================================
         */
 
@@ -894,6 +1258,8 @@ const server =
               res,
               400,
               {
+                ok: false,
+
                 error:
                   'Informe o ID da partida.'
               }
@@ -911,6 +1277,8 @@ const server =
               res,
               404,
               {
+                ok: false,
+
                 error:
                   'Partida não encontrada.'
               }
@@ -922,8 +1290,12 @@ const server =
             200,
             {
               ok: true,
+
               source:
                 'SportMonks',
+
+              fixtureId:
+                fixture.id,
 
               summary:
                 buildMatchSummary(
@@ -938,7 +1310,172 @@ const server =
 
         /*
         ================================================
-        BUSCAR PARTIDA PELOS TIMES
+        ODDS POR FIXTURE
+        ================================================
+        */
+
+        if (
+          url.pathname ===
+          '/api/odds'
+        ) {
+
+          const id =
+            url.searchParams.get(
+              'id'
+            );
+
+          if (!id) {
+
+            return json(
+              res,
+              400,
+              {
+                ok: false,
+
+                error:
+                  'Informe o ID da partida.'
+              }
+            );
+          }
+
+          const odds =
+            await getFixtureOdds(
+              id
+            );
+
+          return json(
+            res,
+            200,
+            {
+              ok: true,
+
+              source:
+                'SportMonks',
+
+              fixtureId:
+                Number(id),
+
+              count:
+                odds.length,
+
+              odds
+            }
+          );
+        }
+
+        /*
+        ================================================
+        ESTATÍSTICAS POR FIXTURE
+        ================================================
+        */
+
+        if (
+          url.pathname ===
+          '/api/statistics'
+        ) {
+
+          const id =
+            url.searchParams.get(
+              'id'
+            );
+
+          if (!id) {
+
+            return json(
+              res,
+              400,
+              {
+                ok: false,
+
+                error:
+                  'Informe o ID da partida.'
+              }
+            );
+          }
+
+          const statistics =
+            await getFixtureStatistics(
+              id
+            );
+
+          return json(
+            res,
+            200,
+            {
+              ok: true,
+
+              source:
+                'SportMonks',
+
+              fixtureId:
+                Number(id),
+
+              count:
+                statistics.length,
+
+              statistics
+            }
+          );
+        }
+
+        /*
+        ================================================
+        XG POR FIXTURE
+        ================================================
+        */
+
+        if (
+          url.pathname ===
+          '/api/xg'
+        ) {
+
+          const id =
+            url.searchParams.get(
+              'id'
+            );
+
+          if (!id) {
+
+            return json(
+              res,
+              400,
+              {
+                ok: false,
+
+                error:
+                  'Informe o ID da partida.'
+              }
+            );
+          }
+
+          const xg =
+            await getFixtureXG(
+              id
+            );
+
+          return json(
+            res,
+            200,
+            {
+              ok: true,
+
+              source:
+                'SportMonks',
+
+              fixtureId:
+                Number(id),
+
+              count:
+                xg.length,
+
+              xg
+            }
+          );
+        }
+
+        /*
+        ================================================
+        BUSCAR PARTIDA POR TIMES
         ================================================
         */
 
@@ -947,17 +1484,19 @@ const server =
           '/api/match'
         ) {
 
-          const q =
+          const query =
             url.searchParams.get(
               'q'
             );
 
-          if (!q) {
+          if (!query) {
 
             return json(
               res,
               400,
               {
+                ok: false,
+
                 error:
                   'Digite os dois times.'
               }
@@ -965,7 +1504,9 @@ const server =
           }
 
           const teams =
-            parseTeams(q);
+            parseTeams(
+              query
+            );
 
           if (!teams) {
 
@@ -973,6 +1514,8 @@ const server =
               res,
               400,
               {
+                ok: false,
+
                 error:
                   'Use: Time A x Time B'
               }
@@ -985,16 +1528,7 @@ const server =
               teams.away
             );
 
-          /*
-           * SportMonks encontrada.
-           */
-
           if (fixture) {
-
-            /*
-             * Busca novamente pelo ID com
-             * o conjunto completo de dados.
-             */
 
             const complete =
               await getSportmonksFixture(
@@ -1027,7 +1561,7 @@ const server =
           }
 
           /*
-           * Fallback API-Football.
+           * Fallback API-Football
            */
 
           const fallback =
@@ -1061,113 +1595,12 @@ const server =
             res,
             404,
             {
+              ok: false,
+
               error:
                 'Partida não encontrada.',
+
               teams
-            }
-          );
-        }
-
-        /*
-        ================================================
-        JOGOS DO DIA
-        ================================================
-        */
-
-        if (
-          url.pathname ===
-          '/api/today'
-        ) {
-
-          const data =
-            await getTodayData();
-
-          return json(
-            res,
-            200,
-            {
-              ok: true,
-              source:
-                'SportMonks',
-              ...data,
-
-              summaries:
-                data.fixtures.map(
-                  buildMatchSummary
-                )
-            }
-          );
-        }
-
-        /*
-        ================================================
-        PRÓXIMOS JOGOS
-        ================================================
-        */
-
-        if (
-          url.pathname ===
-          '/api/upcoming'
-        ) {
-
-          const days =
-            url.searchParams.get(
-              'days'
-            ) || 7;
-
-          const data =
-            await getUpcomingData(
-              days
-            );
-
-          return json(
-            res,
-            200,
-            {
-              ok: true,
-              source:
-                'SportMonks',
-              ...data,
-
-              summaries:
-                data.fixtures.map(
-                  buildMatchSummary
-                )
-            }
-          );
-        }
-
-        /*
-        ================================================
-        AO VIVO
-        ================================================
-        */
-
-        if (
-          url.pathname ===
-          '/api/live'
-        ) {
-
-          const fixtures =
-            await getLiveFixtures();
-
-          return json(
-            res,
-            200,
-            {
-              ok: true,
-              source:
-                'SportMonks',
-
-              count:
-                fixtures.length,
-
-              fixtures,
-
-              summaries:
-                fixtures.map(
-                  buildMatchSummary
-                )
             }
           );
         }
@@ -1203,19 +1636,15 @@ const server =
         ================================================
         */
 
-        res.writeHead(
+        return json(
+          res,
           404,
           {
-            'Content-Type':
-              'application/json'
-          }
-        );
+            ok: false,
 
-        res.end(
-          JSON.stringify({
             error:
               'Página não encontrada.'
-          })
+          }
         );
 
       } catch (error) {
@@ -1253,7 +1682,7 @@ server.listen(
   () => {
 
     console.log(
-      `Live Match Stats V3 ativo na porta ${PORT}`
+      `Live Match Stats V4 ativo na porta ${PORT}`
     );
 
     console.log(
